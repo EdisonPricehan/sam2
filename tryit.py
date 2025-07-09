@@ -120,11 +120,11 @@ def load_points(save_path):
 
 if __name__ == '__main__':
     # Model setup
-    checkpoint = "./checkpoints/sam2.1_hiera_tiny.pt"
-    # checkpoint = "./checkpoints/sam2.1_hiera_small.pt"
+    # checkpoint = "./checkpoints/sam2.1_hiera_tiny.pt"
+    checkpoint = "./checkpoints/sam2.1_hiera_small.pt"
 
-    model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
-    # model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
+    # model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
+    model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
     # video_path = './notebooks/videos/wabash_upstream_640x480_1fps.mp4'
     # video_path = './notebooks/videos/wabash_upstream_true1fps.mp4'
@@ -182,28 +182,13 @@ if __name__ == '__main__':
         else:
             raise ValueError("No points selected")
 
-    # Initialize video capture
-    # cap = cv2.VideoCapture(video_path)
-    # total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    # cap.release()
-
-    # Get first frame for prompting
-    # first_frame = extract_frame(video_path, 0)
-    # if first_frame is None:
-    #     raise ValueError("Could not read video")
-
-    # Get interactive points
-    # points, labels = get_interactive_points(first_frame)
-    # if not points:
-    #     raise ValueError("No points selected")
-
     # Format prompts
     prompts = [{
         "point_coords": points,
         "point_labels": labels
     }]
 
-    # select the device for computation
+    # Select the device for computation
     if torch.cuda.is_available():
         device = torch.device("cuda")
     elif torch.backends.mps.is_available():
