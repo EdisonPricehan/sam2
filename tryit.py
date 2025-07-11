@@ -97,7 +97,8 @@ def display_results(frame, masks_logits, alpha=0.5, fig=None, ax=None):
 def load_frames_from_dir(frames_dir):
     """Load frame paths sorted by frame number"""
     frame_paths = glob(os.path.join(frames_dir, "*.jpg"))
-    frame_paths.sort(key=lambda x: int(''.join(filter(str.isdigit, os.path.basename(x)))))
+    # frame_paths.sort(key=lambda x: int(''.join(filter(str.isdigit, os.path.basename(x)))))
+    frame_paths.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0].split('_')[-1]))
     return frame_paths
 
 
@@ -221,8 +222,8 @@ if __name__ == '__main__':
 
     with torch.inference_mode():
         print('Initializing state...')
-        state = predictor.init_state(video_path=video_path)  # Use video path if you want to process the video directly
-        # state = predictor.init_state(video_path=frames_dir)  # Use extracted frames directory
+        # state = predictor.init_state(video_path=video_path)  # Use video path if you want to process the video directly
+        state = predictor.init_state(video_path=frames_dir)  # Use extracted frames directory
         print('State inited.')
 
         # Get initial frame results
