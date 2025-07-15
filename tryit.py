@@ -131,18 +131,21 @@ if __name__ == '__main__':
     # video_path = './notebooks/videos/wabash_upstream_true1fps.mp4'
     # video_path = './notebooks/videos/wabash_upstream_fastforward_60x.mp4'
     # video_path = './notebooks/videos/wabash_upstream_fastforward_60x_128x128.mp4'
-    video_path = './notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
+    # video_path = './notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
+    video_path = './notebooks/videos/wabash_river_2_512x512.mp4'
     # video_path = './notebooks/videos/bedroom.mp4'
 
     # frames_dir = "./notebooks/videos/wabash_upstream"
     # frames_dir = "./notebooks/videos/wabash_upstream_128x128"
-    frames_dir = "./notebooks/videos/wabash_upstream_512x512"
+    # frames_dir = "./notebooks/videos/wabash_upstream_512x512"
+    frames_dir = "./notebooks/videos/wabash_river_2_512x512"
     # frames_dir = "./notebooks/videos/bedroom"
 
     # points_file = "notebooks/videos/prompt_points_bedroom.json"
     # points_file = "notebooks/videos/prompt_points_wabash_upstream.json"
     # points_file = "notebooks/videos/prompt_points_wabash_upstream_128x128.json"
-    points_file = "notebooks/videos/prompt_points_wabash_upstream_512x512.json"
+    # points_file = "notebooks/videos/prompt_points_wabash_upstream_512x512.json"
+    points_file = "notebooks/videos/prompt_points_wabash_river_2_512x512.json"
 
     results_dir = "./notebooks/videos/results"
     os.makedirs(results_dir, exist_ok=True)
