@@ -523,8 +523,11 @@ class SAM2VideoPredictor(SAM2Base):
                     obj_output_dict[storage_key][frame_idx] = out
                     if self.clear_non_cond_mem_around_input:
                         # clear non-conditioning memory of the surrounding frames
-                        self._clear_obj_non_cond_mem_around_input(
-                            inference_state, frame_idx, obj_idx
+                        # self._clear_obj_non_cond_mem_around_input(
+                        #     inference_state, frame_idx, obj_idx
+                        # )
+                        self._clear_non_cond_mem_around_input(
+                            inference_state, frame_idx
                         )
 
                 # clear temporary outputs in `temp_output_dict_per_obj`
@@ -595,8 +598,11 @@ class SAM2VideoPredictor(SAM2Base):
                     pred_masks = current_out["pred_masks"].to(device, non_blocking=True)
                     if self.clear_non_cond_mem_around_input:
                         # clear non-conditioning memory of the surrounding frames
-                        self._clear_obj_non_cond_mem_around_input(
-                            inference_state, frame_idx, obj_idx
+                        # self._clear_obj_non_cond_mem_around_input(
+                        #     inference_state, frame_idx, obj_idx
+                        # )
+                        self._clear_non_cond_mem_around_input(
+                            inference_state, frame_idx
                         )
                 else:
                     storage_key = "non_cond_frame_outputs"
@@ -710,7 +716,12 @@ class SAM2VideoPredictor(SAM2Base):
         if backbone_out is None:
             # Cache miss -- we will run inference on a single image
             device = inference_state["device"]
-            image = inference_state["images"][frame_idx].to(device).float().unsqueeze(0)
+
+            pruned_frames_num = inference_state.get("pruned_frames_num", 0)
+            actual_frame_idx = frame_idx - pruned_frames_num
+            image = inference_state["images"][actual_frame_idx].to(device).float().unsqueeze(0)
+
+            # image = inference_state["images"][frame_idx].to(device).float().unsqueeze(0)
             backbone_out = self.forward_image(image)
             # Cache the most recent frame's feature (for repeated interactions with
             # a frame; we can use an LRU cache for more frames in the future).
