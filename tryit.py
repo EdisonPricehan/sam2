@@ -5,7 +5,7 @@ import json
 import time
 from glob import glob
 from collections import OrderedDict, deque
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Union
 from datetime import datetime
 import numpy as np
 # import matplotlib
@@ -267,6 +267,9 @@ def load_points(save_path: str) -> Tuple[List[List[int]], List[int]]:
 
 
 def infer_offline_video():
+    """
+    Run inference on a pre-known video file using SAM2 model (without state pruning) with interactive point selection.
+    """
     # Initialize predictor
     predictor = build_sam2_video_predictor(model_cfg, checkpoint, device=device)
     print("Predictor initialized.")
@@ -397,7 +400,13 @@ def prune_state(state, max_frames: int = 10):
 
 
 @torch.inference_mode()
-def infer_online_stream():
+def infer_online_stream(stream: Union[int, str]):
+    """
+    Run inference on a video stream (webcam or video file) using SAM2 model with state pruning and interactive point selection.
+
+    Args:
+        stream (Union[int, str]): The video stream source. Can be an integer for webcam or a string for video file path.
+    """
     # 1. Predictor & Capture
     predictor: SAM2VideoPredictor = build_sam2_video_predictor(model_cfg, checkpoint, device=device)
     predictor.clear_non_cond_mem_around_input = True
@@ -408,7 +417,7 @@ def infer_online_stream():
         cap = cv2.VideoCapture(0)  # web camera or video file path
         print(f'Using webcam {cap.get(cv2.CAP_PROP_FPS)} FPS')
     else:
-        cap = cv2.VideoCapture('./notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4')  # web camera or video file path
+        cap = cv2.VideoCapture(stream)  # web camera or video file path
         print(f'Using video file {cap.get(cv2.CAP_PROP_FPS)} FPS')
 
     # 2. First frame & prompts
@@ -680,6 +689,6 @@ if __name__ == '__main__':
     if infer_offline:
         infer_offline_video()
     else:
-        infer_online_stream()
+        infer_online_stream(stream=0 if infer_webcam else video_path)
 
     print("Processing complete.")
