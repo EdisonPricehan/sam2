@@ -717,6 +717,7 @@ class SAM2VideoPredictor(SAM2Base):
             # Cache miss -- we will run inference on a single image
             device = inference_state["device"]
 
+            # A tweak to handle pruned frames:
             pruned_frames_num = inference_state.get("pruned_frames_num", 0)
             actual_frame_idx = frame_idx - pruned_frames_num
             image = inference_state["images"][actual_frame_idx].to(device).float().unsqueeze(0)
