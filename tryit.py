@@ -481,7 +481,7 @@ def infer_online_stream():
             frame_id = state["num_frames"] - 1
 
             # Prune the state to keep only the last `max_frames` frames
-            state = prune_state(state, max_frames=5)  # Keep the last N frames in the state
+            state = prune_state(state, max_frames=keep_N_frames)  # Keep the last N frames in the state
 
             # print(f'output_dict_per_obj: {state["output_dict_per_obj"][0]=}')
             # print(f'{frame_id=} {state["num_frames"]=} {state["obj_ids"]=}')
@@ -607,6 +607,7 @@ if __name__ == '__main__':
     save_video = True  # Set to True if you want to save the output video
     infer_offline = False  # True for offline inference with pre-extracted frames, False for online stream inference
     infer_webcam = False  # Set to True if you want to use webcam input
+    keep_N_frames = 5  # Number of frames to keep in the state to limit memory usage
     # img_height, img_width = 1024, 1024  # Has to be aligned with the param "image_size" in the model config yaml file
     img_height, img_width = 512, 512  # Has to be aligned with the param "image_size" in the model config yaml file
 
