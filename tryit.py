@@ -404,7 +404,12 @@ def infer_online_stream():
     print('Predictor initialized.')
 
     # Open video capture (webcam or video file)
-    cap = cv2.VideoCapture(0)  # web camera or video file path
+    if infer_webcam:
+        cap = cv2.VideoCapture(0)  # web camera or video file path
+        print(f'Using webcam {cap.get(cv2.CAP_PROP_FPS)} FPS')
+    else:
+        cap = cv2.VideoCapture('./notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4')  # web camera or video file path
+        print(f'Using video file {cap.get(cv2.CAP_PROP_FPS)} FPS')
 
     # 2. First frame & prompts
     ret, frame = cap.read()
@@ -457,7 +462,6 @@ def infer_online_stream():
 
     try:
         # 5. Stream loop
-        fig, ax = None, None  # For persistent display
         processing_times = deque(maxlen=50)  # For performance stats
         while True:
             # Read a new frame from the video capture
@@ -511,8 +515,6 @@ def infer_online_stream():
             processing_time = time.time() - start_time
             processing_times.append(processing_time)
             stats = get_performance_stats(processing_times)
-
-            # fig, ax, colored_mask = display_results(frame=frame, masks_logits=mask_logits, alpha=0.5, fig=fig, ax=ax)
 
             # Embed performance stats on the mask-overlaid frame
             overlaid_frame = overlay_masks(frame=frame, masks_logits=mask_logits)
@@ -571,11 +573,11 @@ def get_performance_stats(processing_times: deque[float]) -> dict:
 
 if __name__ == '__main__':
     # Model setup
-    checkpoint = "./checkpoints/sam2.1_hiera_tiny.pt"
-    # checkpoint = "./checkpoints/sam2.1_hiera_small.pt"
+    # checkpoint = "./checkpoints/sam2.1_hiera_tiny.pt"
+    checkpoint = "./checkpoints/sam2.1_hiera_small.pt"
 
-    model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
-    # model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
+    # model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
+    model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
     # Video path setup
     # video_path = './notebooks/videos/wabash_upstream_640x480_1fps.mp4'
@@ -604,6 +606,7 @@ if __name__ == '__main__':
     # Configurable variables
     save_video = True  # Set to True if you want to save the output video
     infer_offline = False  # True for offline inference with pre-extracted frames, False for online stream inference
+    infer_webcam = False  # Set to True if you want to use webcam input
     # img_height, img_width = 1024, 1024  # Has to be aligned with the param "image_size" in the model config yaml file
     img_height, img_width = 512, 512  # Has to be aligned with the param "image_size" in the model config yaml file
 
@@ -660,7 +663,11 @@ if __name__ == '__main__':
         if infer_offline:
             output_video_name = os.path.basename(frames_dir)
         else:
-            output_video_name = f'webcam_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+            if infer_webcam:
+                output_video_name = f'webcam_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+            else:
+                output_video_name = os.path.splitext(os.path.basename(video_path))[0] + '_online'
+
         output_video_path = os.path.join(results_dir, f'{output_video_name}.mp4')
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         fps = 30  # Adjust FPS as needed
