@@ -142,11 +142,9 @@ class VideoFrameProcessor:
     """
     Handle video frame processing, extraction, and visualization.
     """
-    
-    def __init__(self, device: torch.device):
-        self.device = device
 
-    def extract_frame(self, video_path: str, frame_idx: int) -> Optional[np.ndarray]:
+    @staticmethod
+    def extract_frame(video_path: str, frame_idx: int) -> Optional[np.ndarray]:
         """
         Extract a specific frame from a video file.
 
@@ -163,7 +161,8 @@ class VideoFrameProcessor:
         cap.release()
         return frame if ret else None
 
-    def extract_frames_from_video(self, video_path: str, frames_dir: str) -> List[str]:
+    @staticmethod
+    def extract_frames_from_video(video_path: str, frames_dir: str) -> List[str]:
         """
         Extract frames from a video file and save them to a directory.
 
@@ -192,7 +191,8 @@ class VideoFrameProcessor:
         print(f"Extracted {frame_idx} frames to {frames_dir}")
         return frame_paths
 
-    def load_frames_from_dir(self, frames_dir: str) -> List[str]:
+    @staticmethod
+    def load_frames_from_dir(frames_dir: str) -> List[str]:
         """
         Load frame paths sorted by frame number.
 
@@ -206,7 +206,8 @@ class VideoFrameProcessor:
         frame_paths.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0].split('_')[-1]))
         return frame_paths
 
-    def preprocess_frame(self, frame: np.ndarray, img_h: int, img_w: int) -> torch.Tensor:
+    @staticmethod
+    def preprocess_frame(frame: np.ndarray, img_h: int, img_w: int, device: torch.device) -> torch.Tensor:
         """
         Convert a video frame to a tensor suitable for model input.
 
@@ -214,6 +215,7 @@ class VideoFrameProcessor:
             frame: The video frame as a numpy array, [height, width, 3].
             img_h: Target height for resizing.
             img_w: Target width for resizing.
+            device: The device to move the tensor to (CPU or GPU).
 
         Returns:
             A tensor of shape [3, img_h, img_w] normalized to [0, 1].
@@ -226,16 +228,17 @@ class VideoFrameProcessor:
         
         # Convert to tensor and normalize
         frame_tensor = torch.from_numpy(frame_resized).float().permute(2, 0, 1) / 255.0
-        frame_tensor = frame_tensor.to(self.device)
+        frame_tensor = frame_tensor.to(device)
         
         # Normalize with ImageNet stats
-        mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(3, 1, 1)
+        mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=device).view(3, 1, 1)
         frame_tensor = (frame_tensor - mean) / std
         
         return frame_tensor
 
-    def overlay_masks(self, frame: np.ndarray, masks_logits: torch.Tensor) -> np.ndarray:
+    @staticmethod
+    def overlay_masks(frame: np.ndarray, masks_logits: torch.Tensor) -> np.ndarray:
         """
         Overlay binary masks on a video frame.
 
@@ -423,7 +426,7 @@ class SAM2VideoInference:
         self.predictor: Optional[SAM2VideoPredictor] = None
         self.point_selector = PointSelector()
         self.performance_monitor = PerformanceMonitor()
-        self.frame_processor = VideoFrameProcessor(self.device)
+        self.frame_processor = VideoFrameProcessor()
         self.state_manager = StateManager(self.device)
         self.prompt_manager = PromptManager()
         
@@ -643,7 +646,7 @@ class SAM2VideoInference:
             video_writer = cv2.VideoWriter(output_video_path, fourcc, 30.0, (img_width, img_height))
 
         # Build initial state
-        first_tensor = self.frame_processor.preprocess_frame(frame, img_height, img_width)
+        first_tensor = self.frame_processor.preprocess_frame(frame, img_height, img_width, self.device)
         state = self.state_manager.create_initial_state(img_height, img_width, first_tensor)
         
         # Get initial features and mask
@@ -670,7 +673,7 @@ class SAM2VideoInference:
                     start_time = time.time()
                     
                     # Process frame
-                    tensor = self.frame_processor.preprocess_frame(frame, img_height, img_width)
+                    tensor = self.frame_processor.preprocess_frame(frame, img_height, img_width, self.device)
                     state["images"] = torch.cat((state["images"], tensor.unsqueeze(0)), dim=0)
                     state["num_frames"] += 1
                     frame_id = state["num_frames"] - 1
@@ -723,6 +726,156 @@ class SAM2VideoInference:
                 video_writer.release()
                 print(f"Output video saved to {output_video_path}")
 
+    def infer_frame_by_frame(
+            self,
+            first_frame: np.ndarray,
+            points: Optional[List[List[int]]] = None,
+            labels: Optional[List[int]] = None,
+            img_height: int = 512,
+            img_width: int = 512,
+            keep_n_frames: int = 5,
+    ):
+        """
+        Generator for frame-by-frame inference, ideal for reinforcement learning applications.
+        Yields masks for each frame including the initial frame with selected points.
+
+        Args:
+            first_frame: The first frame to initialize the predictor
+            points: List of points for object selection (if None, will use interactive selection)
+            labels: List of labels corresponding to points
+            img_height: Target frame height
+            img_width: Target frame width
+            keep_n_frames: Number of frames to keep in memory
+
+        Yields:
+            np.ndarray: Binary mask for the current frame, shape [height, width], value range [0, 1].
+
+        Example:
+            ```python
+            # Initialize with first frame
+            frame_processor = sam2_inference.infer_frame_by_frame(first_frame, points, labels)
+
+            # Get mask for first frame
+            first_mask = next(frame_processor)
+
+            # Process subsequent frames
+            for rgb_image in your_rl_environment:
+                mask = frame_processor.send(rgb_image)
+                # Use mask for RL reward/observation
+                # Action selection
+
+        """
+        print("Initializing frame-by-frame inference...")
+
+        # Configure predictor for online processing
+        self.predictor.clear_non_cond_mem_around_input = True
+
+        # Resize first frame
+        frame = cv2.resize(first_frame, (img_width, img_height), interpolation=cv2.INTER_NEAREST)
+
+        # Get points - use interactive selection if not provided
+        if points is None or labels is None:
+            print("No points provided, using interactive selection...")
+            points, labels = self.point_selector.select_points(frame)
+
+            if not points:
+                raise ValueError("No points selected. Cannot proceed with inference.")
+
+        # Build initial state
+        first_tensor = self.frame_processor.preprocess_frame(frame, img_height, img_width, self.device)
+        state = self.state_manager.create_initial_state(img_height, img_width, first_tensor)
+
+        # Get initial features and mask
+        with torch.inference_mode():
+            self.predictor._get_image_feature(inference_state=state, frame_idx=0, batch_size=1)
+            _, obj_ids, mask_logits = self.predictor.add_new_points_or_box(
+                inference_state=state,
+                frame_idx=0,
+                obj_id=1,
+                points=points,
+                labels=labels,
+            )
+            print('Initial points added.')
+
+            # Convert mask to binary numpy array for first frame
+            first_mask = (mask_logits[0].cpu().numpy() > 0).squeeze().astype(np.uint8)
+
+            # Yield the first frame mask
+            next_frame = yield frame, first_mask
+
+            frame_count = 1
+
+            # Process subsequent frames
+            while next_frame is not None:
+                try:
+                    # Resize incoming frame
+                    frame = cv2.resize(next_frame, (img_width, img_height), interpolation=cv2.INTER_NEAREST)
+
+                    # Process frame
+                    tensor = self.frame_processor.preprocess_frame(frame, img_height, img_width, self.device)
+                    state["images"] = torch.cat((state["images"], tensor.unsqueeze(0)), dim=0)
+                    state["num_frames"] += 1
+                    frame_id = state["num_frames"] - 1
+
+                    # Prune state to manage memory
+                    state = self.state_manager.prune_state(state, max_frames=keep_n_frames)
+
+                    # Run inference
+                    self.predictor.propagate_in_video_preflight(state)
+                    obj_output_dict = state["output_dict_per_obj"][0]
+
+                    current_out, mask_logits = self.predictor._run_single_frame_inference(
+                        inference_state=state,
+                        output_dict=obj_output_dict,
+                        frame_idx=frame_id,
+                        batch_size=1,
+                        is_init_cond_frame=False,
+                        point_inputs=None,
+                        mask_inputs=None,
+                        reverse=False,
+                        run_mem_encoder=True,
+                    )
+
+                    obj_output_dict["non_cond_frame_outputs"][frame_id] = current_out
+                    _, mask_logits = self.predictor._get_orig_video_res_output(state, mask_logits)
+
+                    # Convert mask to binary numpy array
+                    mask = (mask_logits[0].cpu().numpy() > 0).squeeze().astype(np.uint8)
+
+                    # Yield mask and wait for next frame
+                    next_frame = yield frame, mask
+                    frame_count += 1
+
+                except Exception as e:
+                    print(f'Error processing frame {frame_count}: {e}')
+                    break
+
+        print(f"Processed {frame_count} frames total.")
+
+    def reset_inference_state(self, inference_state=None):
+        """
+        Reset the inference state properly using SAM2's built-in reset functionality.
+        Useful when starting a new episode in RL or switching to a different video.
+
+        Args:
+            inference_state: Optional inference state to reset. If None, will reset
+                           the predictor's internal state.
+        """
+        if hasattr(self, 'predictor') and self.predictor is not None:
+            if inference_state is not None:
+                # Reset the specific inference state
+                self.predictor.reset_state(inference_state)
+                print("Inference state reset using SAM2's reset_state method.")
+            else:
+                print("No specific inference state provided to reset.")
+
+            # Clear GPU memory cache
+            torch.cuda.empty_cache()
+            print("GPU memory cache cleared.")
+        else:
+            print("No predictor available to reset.")
+
+
 def main():
     """
     Example usage of the SAM2VideoInference class.
@@ -742,7 +895,61 @@ def main():
     # sam2_inference.infer_online_stream(video_path)
 
     # Example 3: Online stream processing from a webcam
-    sam2_inference.infer_online_stream(0)
+    # sam2_inference.infer_online_stream(0)
+
+    # Example 4: Frame-by-frame processing for RL applications where immediate mask output is needed
+    # Simulate RL environment with frame-by-frame processing
+    cap = cv2.VideoCapture(0)  # Use webcam for demo
+    ret, first_frame = cap.read()
+    if ret:
+        try:
+            # Initialize frame processor with first frame
+            frame_processor = sam2_inference.infer_frame_by_frame(
+                first_frame,
+            )
+
+            # Get mask for first frame
+            first_image, first_mask = next(frame_processor)
+            print(f"First frame shape: {first_image.shape}, first mask shape: {first_mask.shape}")
+
+            # Convert mask to 3-channel for visualization
+            mask_colored = np.stack([first_mask * 255] * 3, axis=-1).astype(np.uint8)
+            colored_frame = cv2.addWeighted(first_image, 1, mask_colored, 0.5, 0)
+            cv2.imshow('SAM2 Frame-by-Frame Demo', colored_frame)
+
+            # Wait for key press or timeout
+            key = cv2.waitKey(1000) & 0xFF
+            if key == ord('q'):
+                print("Exiting early...")
+            else:
+                # Process 10 more frames as example
+                for i in range(10):
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+
+                    # Send frame and get mask
+                    image, mask = frame_processor.send(frame)
+                    print(f"Frame {i+1} mask shape: {mask.shape}, image shape: {image.shape}")
+
+                    # Convert mask to 3-channel for visualization
+                    mask_colored = np.stack([mask * 255] * 3, axis=-1).astype(np.uint8)
+                    colored_frame = cv2.addWeighted(image, 1, mask_colored, 0.5, 0)
+                    cv2.imshow('SAM2 Frame-by-Frame Demo', colored_frame)
+
+                    # Check for quit key
+                    key = cv2.waitKey(1000) & 0xFF
+                    if key == ord('q'):
+                        print("Exiting early...")
+                        break
+
+        except Exception as e:
+            print(f"Error in frame-by-frame processing: {e}")
+        finally:
+            frame_processor.close()
+            cv2.destroyAllWindows()
+
+    cap.release()
 
 
 if __name__ == "__main__":
