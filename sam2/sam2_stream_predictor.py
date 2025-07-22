@@ -876,7 +876,7 @@ class SAM2StreamPredictor:
             print("No predictor available to reset.")
 
 
-def frame_by_frame_demo(sam2_inference: SAM2VideoInference):
+def frame_by_frame_demo(sam2_inference: SAM2StreamPredictor):
     cap = cv2.VideoCapture(0)  # Use webcam for demo
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Set buffer size to 1 to minimize buffering
 
