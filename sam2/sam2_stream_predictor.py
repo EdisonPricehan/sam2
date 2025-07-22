@@ -900,6 +900,7 @@ def main():
     # Example 4: Frame-by-frame processing for RL applications where immediate mask output is needed
     # Simulate RL environment with frame-by-frame processing
     cap = cv2.VideoCapture(0)  # Use webcam for demo
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Set buffer size to 1 to minimize buffering
     ret, first_frame = cap.read()
     if ret:
         try:
