@@ -876,31 +876,10 @@ class SAM2VideoInference:
             print("No predictor available to reset.")
 
 
-def main():
-    """
-    Example usage of the SAM2VideoInference class.
-    """
-    # Configuration
-    model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
-    checkpoint = "../checkpoints/sam2.1_hiera_small.pt"
-    video_path = '../notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
-
-    # Create inference object
-    sam2_inference = SAM2VideoInference(model_cfg, checkpoint)
-
-    # Example 1: Offline processing of a video in batched mode
-    # sam2_inference.infer_offline_video(video_path)
-
-    # Example 2: Online stream processing from a video without knowing the whole video frames
-    # sam2_inference.infer_online_stream(video_path)
-
-    # Example 3: Online stream processing from a webcam
-    # sam2_inference.infer_online_stream(0)
-
-    # Example 4: Frame-by-frame processing for RL applications where immediate mask output is needed
-    # Simulate RL environment with frame-by-frame processing
+def frame_by_frame_demo(sam2_inference: SAM2VideoInference):
     cap = cv2.VideoCapture(0)  # Use webcam for demo
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Set buffer size to 1 to minimize buffering
+
     ret, first_frame = cap.read()
     if ret:
         try:
@@ -931,7 +910,7 @@ def main():
 
                     # Send frame and get mask
                     image, mask = frame_processor.send(frame)
-                    print(f"Frame {i+1} mask shape: {mask.shape}, image shape: {image.shape}")
+                    print(f"Frame {i + 1} mask shape: {mask.shape}, image shape: {image.shape}")
 
                     # Convert mask to 3-channel for visualization
                     mask_colored = np.stack([mask * 255] * 3, axis=-1).astype(np.uint8)
@@ -951,6 +930,31 @@ def main():
             cv2.destroyAllWindows()
 
     cap.release()
+
+
+def main():
+    """
+    Example usage of the SAM2VideoInference class.
+    """
+    # Configuration
+    model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
+    checkpoint = "../checkpoints/sam2.1_hiera_small.pt"
+    video_path = '../notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
+
+    # Create inference object
+    sam2_inference = SAM2VideoInference(model_cfg, checkpoint)
+
+    # Example 1: Offline processing of a video in batched mode
+    # sam2_inference.infer_offline_video(video_path)
+
+    # Example 2: Online stream processing from a video without knowing the whole video frames
+    # sam2_inference.infer_online_stream(video_path)
+
+    # Example 3: Online stream processing from a webcam
+    sam2_inference.infer_online_stream(stream=0, output_video_path='webcam_output.mp4')
+
+    # Example 4: Frame-by-frame processing for RL applications where immediate mask output is needed
+    # frame_by_frame_demo(sam2_inference)
 
 
 if __name__ == "__main__":

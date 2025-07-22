@@ -17,46 +17,58 @@ This project extends the original [Segment Anything Model 2 (SAM2) Video Predict
 
 - **Save Output**: Configurable save_video flag writes results to MP4 with correct dimensions.
 
+- **Generator Interface**: Added infer_frame_by_frame for custom pipelines, yielding each processed frame with segmentation mask.
+
 
 ### Major Change
-Major changes are made in `tryit.py`, which is the main script for running the online segmentation. 
+Major changes are made in `sam2_stream_predictor.py`, which is the main script for running the online segmentation. 
+The non-ObjectOriented implementation is in `tryit.py`, which is deprecated and will be removed in the future.
 
 ### Minor Changes
 Changes are also made in `sam2_video_predictor.py`, where a miscall of `_clear_non_cond_mem_around_input` was fixed, and frame index was tweaked in function `_get_image_feature` since we only keep the latest N frames in memory.
 Besides, the `image_size` parameter in config files is set to be the same as the `img_height` and `img_width` in the `tryit.py` script, so that the model can be loaded correctly.
 
+## Main Classes
+
+The core logic for online and offline video segmentation is implemented in `sam2_stream_predictor.py` using the following classes:
+
+- **PointSelector**: Handles interactive point selection on an image using OpenCV. 
+Allows users to select foreground (left click) and background (right click) points for initialization.
+
+- **PerformanceMonitor**: Tracks and overlays performance statistics (FPS, latency, GPU memory usage) on output frames.
+
+- **VideoFrameProcessor**: Provides utilities for extracting frames from video, loading frames from a directory, preprocessing frames for model input, and overlaying segmentation masks on frames.
+
+- **StateManager**: Manages the internal state for SAM2 inference, including memory-efficient pruning of cached features and prompt inputs to reduce GPU usage.
+
+- **PromptManager**: Handles saving and loading of prompt points and labels to/from JSON files for reproducible experiments.
+
+- **SAM2VideoInference**: The main interface for running SAM2 video inference. Supports:
+  - `infer_offline_video`: Batched inference on pre-extracted frames or video files.
+  - `infer_online_stream`: Real-time inference on live streams (webcam or video file) with bounded memory.
+  - `infer_frame_by_frame`: Generator for frame-by-frame inference, suitable for RL or custom pipelines.
+  - `reset_inference_state`: Resets the inference state for new episodes or videos.
+
 ## Usage
-Edit `tryit.py` configuration near the bottom:
+Edit `sam2_stream_predictor.py` configuration near the bottom:
 ```python
 # Model & checkpoint
-checkpoint = "./checkpoints/sam2.1_hiera_small.pt"
-model_cfg  = "./configs/sam2.1/sam2.1_hiera_s.yaml"
-
-# Inference mode flags
-infer_offline = False    # `True` to run on extracted frames; `False` for live stream or file
-infer_webcam  = False    # `True` to open webcam; ignored if `infer_offline=True`
-save_video    = True     # `True` to write out MP4 to `videos/results/`
-keep_N_frames = 5        # Number of frames to keep in the state to limit memory usage
-
-# Paths for offline mode
-video_path = "./notebooks/videos/your_video.mp4"
-frames_dir = "./notebooks/videos/your_frames_dir"
-points_file = "./notebooks/videos/your_prompts.json"
-
-# Image size (must match model config)
-img_height, img_width = 512, 512
+model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
+checkpoint = "../checkpoints/sam2.1_hiera_small.pt"
+video_path = '../notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
 ```
+Uncomment the example line to test with different input video sources.
 
 Once you run the script, it will pop up a window showing the first frame (either from webcam of a video file). 
-You can left click on the foreground (and optionally right click background) to initialize the segmentation, then press `q` to start the online segmentation.
+You can left click on the foreground (and optionally right click background) to initialize the segmentation, then press `q` to finish point selection then start the online segmentation.
 The script will then process each frame in real time, displaying the segmentation results and performance statistics.
 
 ## Example Online Inference Video
-Stats are based on a NVIDIA RTX 4060 GPU with 8GB memory, and the model is SAM2.1 Hierarchical Small.
+Stats are based on a NVIDIA RTX 4060 GPU with 8GB GPU memory, and the model is SAM2.1 Hierarchical Small.
 
-![Wabash River Video](./notebooks/videos/results/wabash_upstream_fastforward_60x_512x512_online.mp4)
+![Wabash River Video](./notebooks/videos/results/wabash_upstream_fastforward_60x_512x512_online.gif)
 
-![Webcam Stream](./notebooks/videos/results/webcam_20250718_170455.mp4)
+![Webcam Stream](./notebooks/videos/results/webcam_20250718_170455.gif)
 
 ## Issues
 Still, the GPU memory usage will grow over time, just at a very slower rate than the original SAM2 Video Predictor.
