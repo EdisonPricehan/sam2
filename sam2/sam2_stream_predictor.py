@@ -411,7 +411,7 @@ class PromptManager:
         return data['points'], data['labels']
 
 
-class SAM2VideoInference:
+class SAM2StreamPredictor:
     """
     Main class for SAM2 video inference with support for both offline and online processing.
     """
@@ -942,7 +942,7 @@ def main():
     video_path = '../notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
 
     # Create inference object
-    sam2_inference = SAM2VideoInference(model_cfg, checkpoint)
+    sam2_inference = SAM2StreamPredictor(model_cfg, checkpoint)
 
     # Example 1: Offline processing of a video in batched mode
     # sam2_inference.infer_offline_video(video_path)
