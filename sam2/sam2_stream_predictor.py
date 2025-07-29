@@ -740,30 +740,12 @@ class SAM2StreamPredictor:
         Yields masks for each frame including the initial frame with selected points.
 
         Args:
-            first_frame: The first frame to initialize the predictor
+            first_frame: The first frame to initialize the inference, [height, width, 3].
             points: List of points for object selection (if None, will use interactive selection)
             labels: List of labels corresponding to points
             img_height: Target frame height
             img_width: Target frame width
-            keep_n_frames: Number of frames to keep in memory
-
-        Yields:
-            np.ndarray: Binary mask for the current frame, shape [height, width], value range [0, 1].
-
-        Example:
-            ```python
-            # Initialize with first frame
-            frame_processor = sam2_inference.infer_frame_by_frame(first_frame, points, labels)
-
-            # Get mask for first frame
-            first_mask = next(frame_processor)
-
-            # Process subsequent frames
-            for rgb_image in your_rl_environment:
-                mask = frame_processor.send(rgb_image)
-                # Use mask for RL reward/observation
-                # Action selection
-
+            keep_n_frames: Number of frames to keep in memory for inference
         """
         print("Initializing frame-by-frame inference...")
 
@@ -785,8 +767,8 @@ class SAM2StreamPredictor:
         first_tensor = self.frame_processor.preprocess_frame(frame, img_height, img_width, self.device)
         state = self.state_manager.create_initial_state(img_height, img_width, first_tensor)
 
-        # Get initial features and mask
-        with torch.inference_mode():
+        # Get initial features and mask - only SAM2 inference needs no_grad
+        with torch.no_grad():
             self.predictor._get_image_feature(inference_state=state, frame_idx=0, batch_size=1)
             _, obj_ids, mask_logits = self.predictor.add_new_points_or_box(
                 inference_state=state,
@@ -800,17 +782,19 @@ class SAM2StreamPredictor:
             # Convert mask to binary numpy array for first frame
             first_mask = (mask_logits[0].cpu().numpy() > 0).squeeze().astype(np.uint8)
 
-            # Yield the first frame mask
-            next_frame = yield frame, first_mask
+        # Yield the first frame mask (outside of no_grad context)
+        next_frame = yield frame, first_mask
 
-            frame_count = 1
+        frame_count = 1
 
-            # Process subsequent frames
-            while next_frame is not None:
-                try:
-                    # Resize incoming frame
-                    frame = cv2.resize(next_frame, (img_width, img_height), interpolation=cv2.INTER_NEAREST)
+        # Process subsequent frames
+        while next_frame is not None:
+            try:
+                # Resize incoming frame
+                frame = cv2.resize(next_frame, (img_width, img_height), interpolation=cv2.INTER_NEAREST)
 
+                # Only SAM2 processing needs no_grad, not the RL policy
+                with torch.no_grad():
                     # Process frame
                     tensor = self.frame_processor.preprocess_frame(frame, img_height, img_width, self.device)
                     state["images"] = torch.cat((state["images"], tensor.unsqueeze(0)), dim=0)
@@ -842,13 +826,13 @@ class SAM2StreamPredictor:
                     # Convert mask to binary numpy array
                     mask = (mask_logits[0].cpu().numpy() > 0).squeeze().astype(np.uint8)
 
-                    # Yield mask and wait for next frame
-                    next_frame = yield frame, mask
-                    frame_count += 1
+                # Yield mask and wait for next frame (outside of no_grad context)
+                next_frame = yield frame, mask
+                frame_count += 1
 
-                except Exception as e:
-                    print(f'Error processing frame {frame_count}: {e}')
-                    break
+            except Exception as e:
+                print(f'Error processing frame {frame_count}: {e}')
+                break
 
         print(f"Processed {frame_count} frames total.")
 
