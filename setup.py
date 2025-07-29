@@ -22,9 +22,9 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 # Required dependencies
 REQUIRED_PACKAGES = [
-    "torch>=2.5.1",
-    "torchvision>=0.20.1",
-    "numpy>=1.24.4",
+    # "torch>=2.5.1",  # too strict, install torch as your need
+    # "torchvision>=0.20.1",  # not needed when just using the inference API
+    # "numpy>=1.24.4",  # too strict, install numpy as your need
     "tqdm>=4.66.1",
     "hydra-core>=1.3.2",
     "iopath>=0.1.10",
