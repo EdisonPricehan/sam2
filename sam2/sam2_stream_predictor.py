@@ -17,6 +17,7 @@ from typing import Optional, Tuple, List, Union, Dict, Any
 import numpy as np
 from sam2.build_sam import build_sam2_video_predictor
 from sam2.sam2_video_predictor import SAM2VideoPredictor
+from datetime import datetime
 
 
 class PointSelector:
@@ -30,26 +31,23 @@ class PointSelector:
         self.image = None
         self.points = []
         self.labels = []
-        self._original_image = None
 
     def reset(self):
         """Reset points and labels for new selection."""
         self.points = []
         self.labels = []
-        if self._original_image is not None:
-            self.image = self._original_image.copy()
 
-    def select_points(self, frame: np.ndarray) -> Tuple[List[List[int]], List[int]]:
+    def select_points(self, frame: np.ndarray, save: bool = True) -> Tuple[List[List[int]], List[int]]:
         """
         Get interactive points from the user on a video frame.
 
         Args:
             frame: The video frame to select points on, [height, width, 3].
+            save: if True, saves the image and JSON with datetime-based filenames in cwd
 
         Returns:
             Tuple containing points and labels lists.
         """
-        self._original_image = frame.copy()
         self.image = frame.copy()
         self.reset()
 
@@ -65,6 +63,18 @@ class PointSelector:
                 break
 
         cv2.destroyAllWindows()
+
+        # Save timestamped image and JSON if requested
+        if save and self.points:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            img_name = f"{ts}_points.jpg"
+            cv2.imwrite(img_name, self.image)
+            print(f"Saved interactive image with {len(self.points)} points to: {img_name}")
+            json_name = f"{ts}_points.json"
+            with open(json_name, 'w') as f:
+                json.dump({'points': self.points, 'labels': self.labels}, f)
+            print(f"Saved selection data to JSON: {json_name}")
+
         return self.points, self.labels
 
     def _mouse_callback(self, event, x, y, flags, param):
