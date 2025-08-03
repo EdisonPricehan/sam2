@@ -11,7 +11,7 @@ authors:
   - given-names: Zihan
     family-names: Wang
     email: wang5044@purdue.edu
-    name-particle: ZIHAN
+    # name-particle: ZIHAN
     affiliation: Purdue University
     orcid: 'https://orcid.org/0000-0001-7527-5955'
 identifiers:
