@@ -1,0 +1,24 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  Segment Anything Model 2 (SAM2) - Online Stream
+  Segmentation
+message: Adapted from SAM2 as a fork.
+type: software
+authors:
+  - given-names: Zihan
+    family-names: Wang
+    email: wang5044@purdue.edu
+    name-particle: ZIHAN
+    affiliation: Purdue University
+    orcid: 'https://orcid.org/0000-0001-7527-5955'
+identifiers:
+  - type: url
+    value: 'https://github.com/EdisonPricehan/sam2'
+    description: Github Repository
+repository-code: 'https://github.com/EdisonPricehan/sam2'
+keywords:
+  - semantic segmentation
+license: Apache-2.0
