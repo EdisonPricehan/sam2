@@ -213,7 +213,8 @@ class VideoFrameProcessor:
             List of sorted frame paths.
         """
         frame_paths = glob(os.path.join(frames_dir, "*.jpg"))
-        frame_paths.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0].split('_')[-1]))
+        # frame_paths.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0].split('_')[-1]))
+        frame_paths.sort()
         return frame_paths
 
     @staticmethod
@@ -460,6 +461,8 @@ class SAM2StreamPredictor:
             output_video_path: Optional[str] = None,
             force_extract: bool = False,
             show_progress: bool = True,
+            masks_dir: Optional[str] = None,
+            save_per_object: bool = False,
     ):
         """
         Run inference on a video file with automatic frame extraction and management.
@@ -473,6 +476,10 @@ class SAM2StreamPredictor:
             output_video_path: Path to save output video
             force_extract: Whether to force re-extraction of frames even if they exist
             show_progress: Whether to display frames during processing
+            masks_dir: If provided, save binary mask PNGs here. Saves a union mask per frame
+                (e.g., frame_00001.png).
+            save_per_object: If True and multiple objects are segmented, also saves per-object masks as
+                frame_00001_obj01.png, frame_00001_obj02.png, ...
         """
         print("Starting offline video inference...")
         
@@ -503,6 +510,12 @@ class SAM2StreamPredictor:
             if not frame_paths:
                 print("Failed to extract frames from video")
                 return
+
+        # Prepare masks output directory if requested
+        save_masks = masks_dir is not None
+        if save_masks:
+            os.makedirs(masks_dir, exist_ok=True)
+            print(f"Masks will be saved to: {masks_dir}")
 
         # Get points - first try to load from JSON, then interactive selection if needed
         if points is None or labels is None:
@@ -571,6 +584,32 @@ class SAM2StreamPredictor:
                 if frame is None:
                     continue
 
+                # Optionally save masks for this frame
+                if save_masks:
+                    try:
+                        # Convert mask logits to binary numpy arrays, shape => (K, H, W)
+                        masks_np = (masks_logits.detach().cpu().numpy() > 0).astype(np.uint8)
+                        if masks_np.ndim == 2:  # (H, W)
+                            masks_np = masks_np[None, ...]
+                        elif masks_np.ndim == 4 and masks_np.shape[1] == 1:  # (K, 1, H, W)
+                            masks_np = masks_np[:, 0, ...]
+                        # Union mask across objects
+                        union_mask = masks_np.any(axis=0).astype(np.uint8)
+                        h, w = frame.shape[:2]
+                        union_resized = cv2.resize(union_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+                        base_name = os.path.splitext(os.path.basename(frame_paths[i]))[0]
+                        union_path = os.path.join(masks_dir, f"{base_name}.png")
+                        cv2.imwrite(union_path, (union_resized * 255).astype(np.uint8))
+                        # Optionally save per-object masks
+                        if save_per_object and masks_np.shape[0] > 1:
+                            for j in range(masks_np.shape[0]):
+                                obj_mask = masks_np[j]
+                                obj_resized = cv2.resize(obj_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+                                obj_path = os.path.join(masks_dir, f"{base_name}_obj{j+1:02d}.png")
+                                cv2.imwrite(obj_path, (obj_resized * 255).astype(np.uint8))
+                    except Exception as e:
+                        print(f"Failed to save masks for frame {i}: {e}")
+
                 # Create output frame with mask overlay
                 output_frame = self.frame_processor.overlay_masks(frame, masks_logits)
 
@@ -616,8 +655,7 @@ class SAM2StreamPredictor:
             img_height: Target frame height
             img_width: Target frame width
             keep_n_frames: Number of frames to keep in memory
-            save_video: Whether to save output video
-            output_video_path: Path to save output video
+            output_video_path: If provided, writes the overlaid output video to this path
         """
         print("Starting online stream inference...")
         
@@ -876,6 +914,7 @@ def frame_by_frame_demo(sam2_inference: SAM2StreamPredictor):
 
     ret, first_frame = cap.read()
     if ret:
+        frame_processor = None
         try:
             # Initialize frame processor with first frame
             frame_processor = sam2_inference.infer_frame_by_frame(
@@ -920,7 +959,11 @@ def frame_by_frame_demo(sam2_inference: SAM2StreamPredictor):
         except Exception as e:
             print(f"Error in frame-by-frame processing: {e}")
         finally:
-            frame_processor.close()
+            try:
+                if frame_processor is not None:
+                    frame_processor.close()
+            except Exception:
+                pass
             cv2.destroyAllWindows()
 
     cap.release()
@@ -933,19 +976,35 @@ def main():
     # Configuration
     model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
     checkpoint = "../checkpoints/sam2.1_hiera_small.pt"
-    video_path = '../notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
+
+    # video_path = '../notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
+    video_path = '/home/edison/afid_videos/wildcat/wildcat_downward-1_1280x720.mp4'
+
+    frames_path = '/home/edison/Research/AerialOrthoMosaic/wildcat_downward-1_images'
 
     # Create inference object
     sam2_inference = SAM2StreamPredictor(model_cfg, checkpoint)
 
     # Example 1: Offline processing of a video in batched mode
     # sam2_inference.infer_offline_video(video_path)
+    sam2_inference.infer_offline_video(
+        video_path,
+        frames_dir=frames_path,
+        save_video=True,
+        output_video_path='wildcat_downward-1_frames_1280x720_mask.mp4',
+        masks_dir='wildcat_downward-1_frames_1280x720_masks'
+    )
 
     # Example 2: Online stream processing from a video without knowing the whole video frames
-    # sam2_inference.infer_online_stream(video_path)
+    # sam2_inference.infer_online_stream(
+    #     stream=video_path,
+    #     img_height=512,
+    #     img_width=512,
+    #     output_video_path='wildcat_downward-1_1280x720_mask.mp4'
+    # )
 
     # Example 3: Online stream processing from a webcam
-    sam2_inference.infer_online_stream(stream=0, output_video_path='webcam_output.mp4')
+    # sam2_inference.infer_online_stream(stream=0, output_video_path='webcam_output.mp4')
 
     # Example 4: Frame-by-frame processing for RL applications where immediate mask output is needed
     # frame_by_frame_demo(sam2_inference)
