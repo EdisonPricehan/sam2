@@ -212,7 +212,10 @@ class VideoFrameProcessor:
         Returns:
             List of sorted frame paths.
         """
-        frame_paths = glob(os.path.join(frames_dir, "*.jpg"))
+        # frame_paths = glob(os.path.join(frames_dir, "*.jpg"))
+        frame_paths = []
+        for pat in ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG"]:
+            frame_paths.extend(glob(os.path.join(frames_dir, pat)))
         # frame_paths.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0].split('_')[-1]))
         frame_paths.sort()
         return frame_paths
@@ -463,6 +466,8 @@ class SAM2StreamPredictor:
             show_progress: bool = True,
             masks_dir: Optional[str] = None,
             save_per_object: bool = False,
+            prob_dir: Optional[str] = None,
+            prob_obj_index: int = 0,
     ):
         """
         Run inference on a video file with automatic frame extraction and management.
@@ -480,6 +485,8 @@ class SAM2StreamPredictor:
                 (e.g., frame_00001.png).
             save_per_object: If True and multiple objects are segmented, also saves per-object masks as
                 frame_00001_obj01.png, frame_00001_obj02.png, ...
+            prob_dir: If provided, saves a single object's probability map per frame as .npy files.
+            prob_obj_index: 0-based index of the object probability to save when multiple objects are present.
         """
         print("Starting offline video inference...")
         
@@ -516,6 +523,12 @@ class SAM2StreamPredictor:
         if save_masks:
             os.makedirs(masks_dir, exist_ok=True)
             print(f"Masks will be saved to: {masks_dir}")
+
+        # Prepare probability output directory if requested
+        save_probs = prob_dir is not None
+        if save_probs:
+            os.makedirs(prob_dir, exist_ok=True)
+            print(f"Probability maps (.npy) will be saved to: {prob_dir}")
 
         # Get points - first try to load from JSON, then interactive selection if needed
         if points is None or labels is None:
@@ -609,6 +622,26 @@ class SAM2StreamPredictor:
                                 cv2.imwrite(obj_path, (obj_resized * 255).astype(np.uint8))
                     except Exception as e:
                         print(f"Failed to save masks for frame {i}: {e}")
+
+                # Optionally save single-object probability map as .npy (exact float32 values)
+                if save_probs:
+                    try:
+                        logits_np = masks_logits.detach().cpu().numpy()
+                        # Normalize to shape (K, H, W)
+                        if logits_np.ndim == 2:  # (H, W)
+                            logits_np = logits_np[None, ...]
+                        elif logits_np.ndim == 4 and logits_np.shape[1] == 1:  # (K, 1, H, W)
+                            logits_np = logits_np[:, 0, ...]
+                        # Select object index safely
+                        k = int(np.clip(prob_obj_index, 0, logits_np.shape[0] - 1))
+                        # Sigmoid to convert logits to probabilities in [0,1]
+                        prob_map = 1.0 / (1.0 + np.exp(-logits_np[k]))
+                        # Save without resizing to preserve exact values
+                        base_name = os.path.splitext(os.path.basename(frame_paths[i]))[0]
+                        prob_npy_path = os.path.join(prob_dir, f"{base_name}_prob_obj{k+1:02d}.npy")
+                        np.save(prob_npy_path, prob_map.astype(np.float32))
+                    except Exception as e:
+                        print(f"Failed to save probability for frame {i}: {e}")
 
                 # Create output frame with mask overlay
                 output_frame = self.frame_processor.overlay_masks(frame, masks_logits)
@@ -957,7 +990,7 @@ def frame_by_frame_demo(sam2_inference: SAM2StreamPredictor):
                         break
 
         except Exception as e:
-            print(f"Error in frame-by-frame processing: {e}")
+            print("Error in frame-by-frame processing: {}".format(e))
         finally:
             try:
                 if frame_processor is not None:
@@ -974,13 +1007,17 @@ def main():
     Example usage of the SAM2VideoInference class.
     """
     # Configuration
-    model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
-    checkpoint = "../checkpoints/sam2.1_hiera_small.pt"
+    # model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
+    # checkpoint = "../checkpoints/sam2.1_hiera_small.pt"
+
+    model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+    checkpoint = "../checkpoints/sam2.1_hiera_large.pt"
 
     # video_path = '../notebooks/videos/wabash_upstream_fastforward_60x_512x512.mp4'
     video_path = '/home/edison/afid_videos/wildcat/wildcat_downward-1_1280x720.mp4'
 
-    frames_path = '/home/edison/Research/AerialOrthoMosaic/wildcat_downward-1_images'
+    # frames_path = '/home/edison/Research/AerialOrthoMosaic/wildcat_downward-1_images_5s'
+    frames_path = '/home/edison/Research/AerialOrthoMosaic/outputs/data_log_20251024_155715/image'
 
     # Create inference object
     sam2_inference = SAM2StreamPredictor(model_cfg, checkpoint)
@@ -991,8 +1028,8 @@ def main():
         video_path,
         frames_dir=frames_path,
         save_video=True,
-        output_video_path='wildcat_downward-1_frames_1280x720_mask.mp4',
-        masks_dir='wildcat_downward-1_frames_1280x720_masks'
+        output_video_path='wildcat_creek_park_1024.mp4',
+        masks_dir='/home/edison/Research/AerialOrthoMosaic/outputs/data_log_20251024_155715/mask'
     )
 
     # Example 2: Online stream processing from a video without knowing the whole video frames
@@ -1004,7 +1041,7 @@ def main():
     # )
 
     # Example 3: Online stream processing from a webcam
-    # sam2_inference.infer_online_stream(stream=0, output_video_path='webcam_output.mp4')
+    # sam2_inference.infer_online_stream(stream=0, output_video_path='webcam_output_1028-large-1.mp4')
 
     # Example 4: Frame-by-frame processing for RL applications where immediate mask output is needed
     # frame_by_frame_demo(sam2_inference)
