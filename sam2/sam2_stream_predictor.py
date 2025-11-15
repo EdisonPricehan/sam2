@@ -638,7 +638,7 @@ class SAM2StreamPredictor:
                         prob_map = 1.0 / (1.0 + np.exp(-logits_np[k]))
                         # Save without resizing to preserve exact values
                         base_name = os.path.splitext(os.path.basename(frame_paths[i]))[0]
-                        prob_npy_path = os.path.join(prob_dir, f"{base_name}_prob_obj{k+1:02d}.npy")
+                        prob_npy_path = os.path.join(prob_dir, f"{base_name}.npy")
                         np.save(prob_npy_path, prob_map.astype(np.float32))
                     except Exception as e:
                         print(f"Failed to save probability for frame {i}: {e}")
